@@ -1,0 +1,6 @@
+name: fhv_deep
+channels:
+  - defaults
+dependencies:
+  - python=3.10
+prefix: /zdisk/users/ext_user_03/miniconda3/envs/fhv_deep
