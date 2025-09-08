@@ -1,5 +1,5 @@
 from typing import Tuple, Optional
-import random, math
+import random, math, os
 import numpy as np
 
 import torch
@@ -204,3 +204,34 @@ class SliceDataset(Dataset):
 
         return img, lab
 
+def set_dataloader(data_root, select_N, neg_ratio, test_ratio, val_ratio, batch_size, num_workers, out_dir, seed):
+    # 1) 데이터 로드
+    X, y = load_all_slices_from_tree(data_root, select_N)
+    print(f"[Loaded] total={len(y)} | pos={(y==1).sum()} | neg={(y==0).sum()}")
+    
+    # 2) 음성 언더샘플링 (요청: FHV(-)을 적절히 랜덤 선택)
+    X_bal, y_bal = undersample_negatives(X, y, neg_ratio=neg_ratio)
+    print(f"[Balanced] total={len(y_bal)} | pos={(y_bal==1).sum()} | neg={(y_bal==0).sum()} (neg_ratio={neg_ratio})")
+    
+    # 3) train/test split then train/val split
+    (Xtr_full, ytr_full), (Xte, yte) = train_test_split_stratified(X_bal, y_bal, test_ratio=test_ratio, seed=seed)
+    (Xtr, ytr), (Xval, yval) = train_val_split_stratified(Xtr_full, ytr_full, val_ratio=val_ratio, seed=seed)
+    print(f"[Split] train={len(ytr)} | val={len(yval)} | test={len(yte)} (test_ratio={test_ratio}, val_ratio={val_ratio})")
+    np.save(os.path.join(out_dir, "test_data.npy"), Xte)
+    
+    # 4) Datasets & Dataloaders
+    ds_train = SliceDataset(Xtr, ytr)
+    ds_val   = SliceDataset(Xval, yval)
+    ds_test  = SliceDataset(Xte, yte)
+    
+    dl_train = DataLoader(ds_train, batch_size=batch_size, shuffle=True,
+                          num_workers=num_workers, pin_memory=False,
+                          persistent_workers=False if num_workers == 0 else True)
+    dl_val   = DataLoader(ds_val, batch_size=batch_size, shuffle=False,
+                          num_workers=num_workers, pin_memory=False,
+                          persistent_workers=False if num_workers == 0 else True)
+    dl_test  = DataLoader(ds_test,  batch_size=batch_size, shuffle=False,
+                          num_workers=num_workers, pin_memory=False,
+                          persistent_workers=False if num_workers == 0 else True)
+    
+    return dl_train, dl_val, dl_test
