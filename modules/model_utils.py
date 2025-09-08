@@ -37,6 +37,12 @@ def build_resnet_1ch(model_depth: int = 18, num_classes: int = 1) -> nn.Module:
         model = models.resnet18(weights=None)
     elif model_depth == 34:
         model = models.resnet34(weights=None)
+    elif model_depth == 50:
+        model = models.resnet50(weights=None)
+    elif model_depth == 101:
+        model = models.resnet101(weights=None)
+    elif model_depth == 152:
+        model = models.resnet152(weights=None)
 
     # 첫 번째 convolution 레이어 교체
     # - 원래 정의: nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3, bias=False)
@@ -52,12 +58,12 @@ def build_resnet_1ch(model_depth: int = 18, num_classes: int = 1) -> nn.Module:
 
     return model
 
-def model_loss_optimizer_resnet(device, weight_pos, lr, show_model_summary):
+def model_loss_optimizer_resnet(resnet_depth, device, weight_pos, lr, show_model_summary):
     # 1채널 입력(흑백 FLAIR slice)에 맞춘 ResNet18 모델 생성
     # - conv1: in_channels=1 (기본은 3, RGB용)
     # - fc: out_features=1 (이진 분류 → 단일 logit 출력)
     # - to(device): 모델 파라미터를 GPU 또는 CPU로 이동 (입력 텐서와 같은 디바이스여야 함)
-    model = build_resnet_1ch(num_classes=1).to(device)
+    model = build_resnet_1ch(model_depth=resnet_depth, num_classes=1).to(device)
 
     # 클래스 불균형 보정을 위한 가중치
     # - BCEWithLogitsLoss에서 양성 클래스 손실에 곱해짐

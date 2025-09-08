@@ -14,6 +14,7 @@ FHV(+) / FHV(-) 이진 분류 (slice-level) - ResNet18 통합 스크립트
 
 '''
 python main_v01.py --data_root ./01_data/04_flair_preproc_slices --out_dir ./runs/fhv_resnet18_with_cam --neg_ratio 1.0 --test_ratio 0.3 --val_ratio 0.1 --epochs 100 --batch_size 16 --lr 1e-3 --lr_scheduler plateau --plateau_mode min --plateau_factor 0.5 --plateau_patience 2 --weight_pos 1.2 --amp --num_workers 0 --export_cam --cam_layer layer4 --cam_target pos
+python main_v01.py --data_root ./01_data/04_flair_preproc_slices --out_dir ./02_results/fhv_resnet18_with_cam --neg_ratio 1.0 --test_ratio 0.3 --val_ratio 0.1 --epochs 10 --batch_size 16 --lr 1e-3 --lr_scheduler plateau --plateau_mode min --plateau_factor 0.5 --plateau_patience 2 --weight_pos 1.0 --amp --num_workers 0 --export_cam --cam_layer layer4 --cam_target pos --show_model_summary True --resnet_depth 34
 '''
 
 import os, argparse, json
@@ -48,6 +49,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--amp", action="store_true", help="자동 혼합 정밀도 사용")
     parser.add_argument("--select_N", type=int, default=None, help="처음 몇개의 데이터를 사용할 것인가")
     parser.add_argument("--show_model_summary", type=lambda x: (str(x).lower() == 'true'), default=True, help="show model structure")
+    parser.add_argument("--resnet_depth", type=int, default=18)
 
     # LR scheduler options
     parser.add_argument("--lr_scheduler", type=str, default="none",
@@ -140,9 +142,10 @@ def main():
     
     # Generate model
     model, criterion, optimizier = model_loss_optimizer_resnet(device=device,
-                                                                 weight_pos=args.weight_pos,
-                                                                 lr=args.lr,
-                                                                 show_model_summary=args.show_model_summary) 
+                                                               weight_pos=args.weight_pos,
+                                                               lr=args.lr,
+                                                               show_model_summary=args.show_model_summary,
+                                                               resnet_depth=args.resnet_depth) 
     
     # Init scheduler
     scheduler = init_lr_scheduler(scheduler_name=args.lr_scheduler,
