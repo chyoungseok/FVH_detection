@@ -75,7 +75,7 @@ def model_loss_optimizer_resnet(resnet_depth, device, weight_pos, lr, show_model
     # - 모델 출력(logit)을 그대로 입력 (sigmoid 따로 쓰지 말 것)
     # - 내부에서 sigmoid + binary cross entropy를 안정적으로 계산
     # - pos_weight 옵션을 통해 양성 클래스 손실 기여도를 조절
-    criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
+    criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight).to(device)
 
     # 옵티마이저: Adam
     # - model.parameters(): 모델의 학습 가능한 모든 파라미터를 업데이트 대상으로 지정
@@ -84,8 +84,8 @@ def model_loss_optimizer_resnet(resnet_depth, device, weight_pos, lr, show_model
     #   → 너무 크면 underfitting, 너무 작으면 효과 없음. 일반적으로 1e-4 권장
     optimizer = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=1e-4)
     
-    if show_model_summary:
-        summary(model, input_size=(1, 672, 672))
+    # if show_model_summary:
+    #     summary(model, input_size=(1, 672, 672), device='device')
 
     return model, criterion, optimizer
 
@@ -207,7 +207,7 @@ def set_scaler(amp, device):
             scaler.update()
     """
     
-    scaler = torch.amp.GradScaler('cuda') if (amp and device == "cuda") else None
+    scaler = torch.amp.GradScaler(device) if (amp and "cuda" in device) else None
     
     return scaler
 
@@ -373,7 +373,7 @@ def train_loop(
     ):
     
     history = {"train_loss": [], "val_loss": [], "train_acc": [], "val_acc": [], "train_auc": [], "val_auc": [], "lr": []}
-    best_f1, best_ckpt_path, best_metrics = -1.0, os.path.join(out_dir, "best_resnet18.pt"), None
+    best_f1, best_ckpt_path, best_metrics = -1.0, os.path.join(out_dir, "best_model.pt"), None
 
     for epoch in range(1, epochs + 1):
         tr_loss = train_one_epoch(model, dl_train, criterion, optimizer, device, scaler=scaler)

@@ -34,6 +34,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="FHV slice-level binary classification (ResNet18)"
     )
+    parser.add_argument("--num_gpu", type=int, default=0)
     parser.add_argument("--data_root", type=str, required=True,
                         help="subject 폴더들이 모여있는 루트 (subject/slice_img.npy, slice_label.npy)")
     parser.add_argument("--out_dir", type=str, default="./outputs", help="모델/리포트 저장 폴더")
@@ -126,8 +127,11 @@ def main():
     os.makedirs(args.out_dir, exist_ok=True)
     set_seed(args.seed)
     
-    device = "cuda" if torch.cuda.is_available() else "cpu"
+    device = f"cuda:{args.num_gpu}" if torch.cuda.is_available() else "cpu"
     print(f"[Device] {device}")
+    # device = torch.device(device)
+    # torch.cuda.set_device(device)
+    # os.environ['CUDA_VISIBLE_DEVICES'] =f'{args.num_gpu}'
     
     # Data load
     dl_train, dl_val, dl_test = set_dataloader(data_root=args.data_root,
@@ -141,7 +145,7 @@ def main():
                                                seed=args.seed)
     
     # Generate model
-    model, criterion, optimizier = model_loss_optimizer_resnet(device=device,
+    model, criterion, optimizer = model_loss_optimizer_resnet(device=device,
                                                                weight_pos=args.weight_pos,
                                                                lr=args.lr,
                                                                show_model_summary=args.show_model_summary,
@@ -149,7 +153,7 @@ def main():
     
     # Init scheduler
     scheduler = init_lr_scheduler(scheduler_name=args.lr_scheduler,
-                                     optimizer=optimizier,
+                                     optimizer=optimizer,
                                      lr_step_size=args.lr_step_size,
                                      lr_gamma=args.lr_gamma,
                                      lr_milestones=args.lr_milestones,
@@ -171,7 +175,7 @@ def main():
                                                        dl_val=dl_val,
                                                        model=model,
                                                        criterion=criterion,
-                                                       optimizer=optimizier,
+                                                       optimizer=optimizer,
                                                        scheduler=scheduler,
                                                        lr_scheduler=args.lr_scheduler,
                                                        scaler=scaler,
