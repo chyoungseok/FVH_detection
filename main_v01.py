@@ -23,6 +23,7 @@ from torchsummary import summary
 
 from modules.data_utils import *
 from modules.model_utils import *
+from modules.plot_utils import *
 
 # =========================================================
 # Argparse helpers
@@ -81,6 +82,7 @@ def main():
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print(f"[Device] {device}")
     
+    # Data load
     dl_train, dl_val, dl_test = set_dataloader(data_root=args.data_root,
                                                select_N=args.select_N,
                                                neg_ratio=args.neg_ratio,
@@ -91,35 +93,48 @@ def main():
                                                out_dir=args.out_dir,
                                                seed=args.seed)
     
+    # Generate model
+    model, criterion, optimizier = model_loss_optimizer_resnet18(device=device,
+                                                                 weight_pos=args.weight_pos,
+                                                                 lr=args.lr,
+                                                                 show_model_summary=args.show_model_summary) 
     
-    # 5) 모델/손실/최적화
-    # 1채널 입력(흑백 FLAIR slice)에 맞춘 ResNet18 모델 생성
-    # - conv1: in_channels=1 (기본은 3, RGB용)
-    # - fc: out_features=1 (이진 분류 → 단일 logit 출력)
-    # - to(device): 모델 파라미터를 GPU 또는 CPU로 이동 (입력 텐서와 같은 디바이스여야 함)
-    model = build_resnet18_1ch(num_classes=1).to(device)
-
-    # 클래스 불균형 보정을 위한 가중치
-    # - BCEWithLogitsLoss에서 양성 클래스 손실에 곱해짐
-    # - 원본 데이터(불균형)를 그대로 쓰면 pos_weight ≈ N_neg / N_pos 로 설정
-    # - BUT: 이미 1:1 언더샘플링을 적용했으므로 pos_weight=1.0 으로 두면 충분
-    pos_weight = torch.tensor([args.weight_pos], device=device)
-
-    # 손실 함수: BCE with Logits
-    # - 모델 출력(logit)을 그대로 입력 (sigmoid 따로 쓰지 말 것)
-    # - 내부에서 sigmoid + binary cross entropy를 안정적으로 계산
-    # - pos_weight 옵션을 통해 양성 클래스 손실 기여도를 조절
-    criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
-
-    # 옵티마이저: Adam
-    # - model.parameters(): 모델의 학습 가능한 모든 파라미터를 업데이트 대상으로 지정
-    # - lr: 학습률, 보통 1e-3에서 시작
-    # - weight_decay: L2 정규화 항 (가중치가 과도하게 커지는 것을 막아 과적합 방지)
-    #   → 너무 크면 underfitting, 너무 작으면 효과 없음. 일반적으로 1e-4 권장
-    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=1e-4)
+    # Init scheduler
+    scheduler = init_lr_scheduler(scheduler_name=args.lr_scheduler,
+                                     optimizer=optimizier,
+                                     lr_step_size=args.lr_step_size,
+                                     lr_gamma=args.lr_gamma,
+                                     lr_milestones=args.lr_milestones,
+                                     epochs=args.epochs,
+                                     lr_T_max=args.lr_T_max,
+                                     lr_eta_min=args.lr_eta_min,
+                                     plateau_mode=args.plateau_mode,
+                                     plateau_factor=args.plateau_factor,
+                                     plateau_patience=args.plateau_patience)
     
-    if args.show_model_summary:
-        summary(model, input_size=(1, 672, 672))
-
+    # Set gradient scaler
+    scaler = set_scaler(args.amp, device)
+    
+    # Training loop
+    history, best_ckpt_path = train_loop(out_dir=args.out_dir,
+                                         device=device,
+                                         epochs=args.epochs,
+                                         dl_train=dl_train,
+                                         dl_val=dl_val,
+                                         model=model,
+                                         criterion=criterion,
+                                         optimizer=optimizier,
+                                         scheduler=scheduler,
+                                         lr_scheduler=args.lr_scheduler,
+                                         scaler=scaler,
+                                         args=args)
+    # Plot training curves
+    plot_training_curves(history=history,
+                         out_dir=args.out_dir)
+    save_history_csv(history=history,
+                     out_dir=args.out_dir)
+    
+    
+    
 if __name__=='__main__':
     main()

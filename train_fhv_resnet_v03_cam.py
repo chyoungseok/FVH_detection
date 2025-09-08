@@ -744,7 +744,7 @@ def main():
     ckpt = torch.load(
         best_ckpt_path,
         map_location=device if isinstance(device, str) else None,
-        weights_only=False  # 추후 기본값 변경 대비(원동작 유지)
+        weights_only=False 
         ) if os.path.exists(best_ckpt_path) else None
     
     if ckpt and 'model' in ckpt:

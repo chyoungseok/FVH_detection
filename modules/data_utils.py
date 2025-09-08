@@ -1,4 +1,4 @@
-from typing import Tuple, Optional
+from typing import Tuple
 import random, math, os
 import numpy as np
 
