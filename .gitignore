@@ -2,3 +2,4 @@
 02_results/**/*.pt
 02_results/**/*.npy
 02_results/*/cam_test/
+02_results/*/ig_test/
