@@ -16,7 +16,7 @@ FHV(+) / FHV(-) 이진 분류 (slice-level) - ResNet18 통합 스크립트
 python main_v01.py --data_root ./01_data/04_flair_preproc_slices --out_dir ./runs/fhv_resnet18_with_cam --neg_ratio 1.0 --test_ratio 0.3 --val_ratio 0.1 --epochs 100 --batch_size 16 --lr 1e-3 --lr_scheduler plateau --plateau_mode min --plateau_factor 0.5 --plateau_patience 2 --weight_pos 1.2 --amp --num_workers 0 --export_cam --cam_layer layer4 --cam_target pos
 '''
 
-import os, argparse
+import os, argparse, json
 
 import torch
 from torchsummary import summary
@@ -24,6 +24,7 @@ from torchsummary import summary
 from modules.data_utils import *
 from modules.model_utils import *
 from modules.plot_utils import *
+from modules.cam_utils import *
 
 # =========================================================
 # Argparse helpers
@@ -45,7 +46,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--weight_pos", type=float, default=1.0, help="BCE pos_weight (양성 가중치)")
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--amp", action="store_true", help="자동 혼합 정밀도 사용")
-    parser.add_argument("--select_N", type=int, default=100, help="처음 몇개의 데이터를 사용할 것인가")
+    parser.add_argument("--select_N", type=int, default=None, help="처음 몇개의 데이터를 사용할 것인가")
     parser.add_argument("--show_model_summary", type=lambda x: (str(x).lower() == 'true'), default=True, help="show model structure")
 
     # LR scheduler options
@@ -74,8 +75,52 @@ def parse_args(cli_args=None):
     parser = build_arg_parser()
     return parser.parse_args(cli_args)
 
+def save_args(args, out_dir, fname="args.json"):
+    """
+    argparse.Namespace 객체를 JSON 파일로 저장하는 함수
+
+    Args:
+        args (argparse.Namespace): 파싱된 인자
+        out_dir (str): 저장할 디렉토리
+        fname (str): 파일 이름 (기본: args.json)
+    """
+    os.makedirs(out_dir, exist_ok=True)
+    path = os.path.join(out_dir, fname)
+
+    with open(path, "w") as f:
+        json.dump(vars(args), f, indent=4)  # indent=4 → 보기 좋게 정렬
+    
+    print(f"[Saved] arguments to {path}")
+
+def write_final_report(args, best_metrics, test_metrics, best_ckpt_path):
+    # Write detailed report
+    rep_path = os.path.join(args.out_dir, "test_report.txt")
+    with open(rep_path, "w") as f:
+        f.write("=== Validation (best) Metrics ===\n")
+        if best_metrics:
+            f.write(f"ACC: {best_metrics['acc']:.4f}\nPREC: {best_metrics['prec']:.4f}\nREC: {best_metrics['rec']:.4f}\nF1: {best_metrics['f1']:.4f}\nAUC: {best_metrics['auc']:.4f}\n")
+            f.write(f"CM:\n{best_metrics['cm']}\n\n")
+        f.write("=== Test Metrics ===\n")
+        f.write(f"ACC: {test_metrics['acc']:.4f}\n")
+        f.write(f"PREC: {test_metrics['prec']:.4f}\n")
+        f.write(f"REC: {test_metrics['rec']:.4f}\n")
+        f.write(f"F1: {test_metrics['f1']:.4f}\n")
+        f.write(f"AUC: {test_metrics['auc']:.4f}\n")
+        f.write(f"CM:\n{test_metrics['cm']}\n\n")
+        # Classification report at 0.5
+        from sklearn.metrics import classification_report
+        y_pred = (test_metrics['y_prob'] >= 0.5).astype(int)
+        f.write("=== Classification Report (thr=0.5) ===\n")
+        f.write(classification_report(test_metrics['y_true'], y_pred, digits=4))
+
+    print(f"[Saved] curves -> {os.path.join(args.out_dir, 'curve_loss.png')} (+ curve_acc.png)")
+    print(f"[Saved] test plots -> ROC/PR/CM under {args.out_dir}")
+    print(f"[Saved] report -> {rep_path}")
+    print(f"[Saved] best model -> {best_ckpt_path}")
+
 def main():
     args = parse_args()
+    save_args(args, args.out_dir)
     os.makedirs(args.out_dir, exist_ok=True)
     set_seed(args.seed)
     
@@ -94,7 +139,7 @@ def main():
                                                seed=args.seed)
     
     # Generate model
-    model, criterion, optimizier = model_loss_optimizer_resnet18(device=device,
+    model, criterion, optimizier = model_loss_optimizer_resnet(device=device,
                                                                  weight_pos=args.weight_pos,
                                                                  lr=args.lr,
                                                                  show_model_summary=args.show_model_summary) 
@@ -116,18 +161,18 @@ def main():
     scaler = set_scaler(args.amp, device)
     
     # Training loop
-    history, best_ckpt_path = train_loop(out_dir=args.out_dir,
-                                         device=device,
-                                         epochs=args.epochs,
-                                         dl_train=dl_train,
-                                         dl_val=dl_val,
-                                         model=model,
-                                         criterion=criterion,
-                                         optimizer=optimizier,
-                                         scheduler=scheduler,
-                                         lr_scheduler=args.lr_scheduler,
-                                         scaler=scaler,
-                                         args=args)
+    history, best_ckpt_path, best_metrics = train_loop(out_dir=args.out_dir,
+                                                       device=device,
+                                                       epochs=args.epochs,
+                                                       dl_train=dl_train,
+                                                       dl_val=dl_val,
+                                                       model=model,
+                                                       criterion=criterion,
+                                                       optimizer=optimizier,
+                                                       scheduler=scheduler,
+                                                       lr_scheduler=args.lr_scheduler,
+                                                       scaler=scaler,
+                                                       args=args)
     # Plot training curves
     plot_training_curves(history=history,
                          out_dir=args.out_dir)
@@ -142,8 +187,19 @@ def main():
                                       criterion=criterion,
                                       out_dir=args.out_dir)
     
+    cam_analysis(cam_dir=args.cam_dir,
+                 out_dir=args.out_dir,
+                 model=model,
+                 cam_layer=args.cam_layer,
+                 test_metrics=test_metrics,
+                 dl_test=dl_test,
+                 device=device,
+                 cam_target=args.cam_target)
 
-    
+    write_final_report(args=args,
+                       best_metrics=best_metrics,
+                       test_metrics=test_metrics,
+                       best_ckpt_path=best_ckpt_path)
     
     
 if __name__=='__main__':

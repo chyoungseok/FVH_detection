@@ -17,7 +17,7 @@ from modules.plot_utils import save_eval_plots
 # =========================================================
 # 모델: ResNet18 (1채널 입력)
 # =========================================================
-def build_resnet18_1ch(num_classes: int = 1) -> nn.Module:
+def build_resnet_1ch(model_depth: int = 18, num_classes: int = 1) -> nn.Module:
     """
     torchvision resnet18을 흑백 의료영상(slice-level 이진 분류)에 맞게 수정한 모델 생성 함수.
     - conv1: 기본 ResNet은 RGB(3채널) 입력용 → 의료영상은 1채널이므로 in_channels=1로 교체
@@ -33,7 +33,10 @@ def build_resnet18_1ch(num_classes: int = 1) -> nn.Module:
     
     """
     # 기본 ResNet18 불러오기 (사전학습 weight 사용하지 않음: 의료영상 특성 상 ImageNet pretrain과 도메인 차이가 큼)
-    model = models.resnet18(weights=None)
+    if model_depth == 18:
+        model = models.resnet18(weights=None)
+    elif model_depth == 34:
+        model = models.resnet34(weights=None)
 
     # 첫 번째 convolution 레이어 교체
     # - 원래 정의: nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3, bias=False)
@@ -49,12 +52,12 @@ def build_resnet18_1ch(num_classes: int = 1) -> nn.Module:
 
     return model
 
-def model_loss_optimizer_resnet18(device, weight_pos, lr, show_model_summary):
+def model_loss_optimizer_resnet(device, weight_pos, lr, show_model_summary):
     # 1채널 입력(흑백 FLAIR slice)에 맞춘 ResNet18 모델 생성
     # - conv1: in_channels=1 (기본은 3, RGB용)
     # - fc: out_features=1 (이진 분류 → 단일 logit 출력)
     # - to(device): 모델 파라미터를 GPU 또는 CPU로 이동 (입력 텐서와 같은 디바이스여야 함)
-    model = build_resnet18_1ch(num_classes=1).to(device)
+    model = build_resnet_1ch(num_classes=1).to(device)
 
     # 클래스 불균형 보정을 위한 가중치
     # - BCEWithLogitsLoss에서 양성 클래스 손실에 곱해짐
@@ -364,7 +367,7 @@ def train_loop(
     ):
     
     history = {"train_loss": [], "val_loss": [], "train_acc": [], "val_acc": [], "train_auc": [], "val_auc": [], "lr": []}
-    best_f1, best_ckpt_path, best_metrics = -1.0, os.path.join(out_dir, "best_resnet18_fhv.pt"), None
+    best_f1, best_ckpt_path, best_metrics = -1.0, os.path.join(out_dir, "best_resnet18.pt"), None
 
     for epoch in range(1, epochs + 1):
         tr_loss = train_one_epoch(model, dl_train, criterion, optimizer, device, scaler=scaler)
@@ -404,7 +407,7 @@ def train_loop(
             }, best_ckpt_path)
             
     
-    return history, best_ckpt_path
+    return history, best_ckpt_path, best_metrics
 
 def evaluation_on_test(best_ckpt_path, device, model, dl_test, criterion, out_dir):
     ckpt = torch.load(
@@ -425,3 +428,5 @@ def evaluation_on_test(best_ckpt_path, device, model, dl_test, criterion, out_di
     save_eval_plots(test_metrics["y_true"], test_metrics["y_prob"], out_dir, prefix="test", thr=0.5)
     
     return test_metrics
+
+
