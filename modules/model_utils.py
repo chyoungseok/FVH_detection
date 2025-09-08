@@ -12,6 +12,8 @@ from sklearn.metrics import (
 )
 from sklearn.metrics import classification_report
 
+from modules.plot_utils import save_eval_plots
+
 # =========================================================
 # 모델: ResNet18 (1채널 입력)
 # =========================================================
@@ -48,7 +50,6 @@ def build_resnet18_1ch(num_classes: int = 1) -> nn.Module:
     return model
 
 def model_loss_optimizer_resnet18(device, weight_pos, lr, show_model_summary):
-        # 5) 모델/손실/최적화
     # 1채널 입력(흑백 FLAIR slice)에 맞춘 ResNet18 모델 생성
     # - conv1: in_channels=1 (기본은 3, RGB용)
     # - fc: out_features=1 (이진 분류 → 단일 logit 출력)
@@ -405,3 +406,22 @@ def train_loop(
     
     return history, best_ckpt_path
 
+def evaluation_on_test(best_ckpt_path, device, model, dl_test, criterion, out_dir):
+    ckpt = torch.load(
+        best_ckpt_path,
+        map_location=device if isinstance(device, str) else None,
+        weights_only=False 
+        ) if os.path.exists(best_ckpt_path) else None
+    
+    if ckpt and 'model' in ckpt:
+        model.load_state_dict(ckpt['model'])
+    test_metrics = evaluate(model, dl_test, device, criterion)
+    
+    # Save predictions and metrics
+    np.save(os.path.join(out_dir, "test_y_true.npy"), test_metrics["y_true"]) 
+    np.save(os.path.join(out_dir, "test_y_prob.npy"), test_metrics["y_prob"]) 
+
+    # Plots: ROC, PR, Confusion Matrix
+    save_eval_plots(test_metrics["y_true"], test_metrics["y_prob"], out_dir, prefix="test", thr=0.5)
+    
+    return test_metrics

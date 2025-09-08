@@ -134,6 +134,16 @@ def main():
     save_history_csv(history=history,
                      out_dir=args.out_dir)
     
+    # Evaluation on TEST dataset using best checkpoint
+    test_metrics = evaluation_on_test(best_ckpt_path=best_ckpt_path,
+                                      device=device,
+                                      model=model,
+                                      dl_test=dl_test,
+                                      criterion=criterion,
+                                      out_dir=args.out_dir)
+    
+
+    
     
     
 if __name__=='__main__':
