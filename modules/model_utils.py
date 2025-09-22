@@ -17,7 +17,7 @@ from modules.plot_utils import save_eval_plots
 # =========================================================
 # 모델: ResNet18 (1채널 입력)
 # =========================================================
-def build_resnet_1ch(model_depth: int = 18, num_classes: int = 1) -> nn.Module:
+def build_resnet_1ch(model_depth: int=18, num_classes: int=1, ch_size: int=1) -> nn.Module:
     """
     torchvision resnet18을 흑백 의료영상(slice-level 이진 분류)에 맞게 수정한 모델 생성 함수.
     - conv1: 기본 ResNet은 RGB(3채널) 입력용 → 의료영상은 1채널이므로 in_channels=1로 교체
@@ -48,7 +48,7 @@ def build_resnet_1ch(model_depth: int = 18, num_classes: int = 1) -> nn.Module:
     # - 원래 정의: nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3, bias=False)
     # - 여기서 3은 RGB 입력 채널 수 → 흑백 영상은 채널이 1이므로 in_channels=1로 변경
     # - out_channels=64는 ResNet 표준 구조를 맞추기 위한 값 (바꾸면 뒤 레이어와 mismatch 발생)
-    model.conv1 = nn.Conv2d(1, 64, kernel_size=7, stride=2, padding=3, bias=False)
+    model.conv1 = nn.Conv2d(ch_size, 64, kernel_size=7, stride=2, padding=3, bias=False)
 
     # 마지막 fully-connected 레이어 교체
     # - 원래 정의: nn.Linear(512, 1000) → ImageNet 1000-class
@@ -58,12 +58,12 @@ def build_resnet_1ch(model_depth: int = 18, num_classes: int = 1) -> nn.Module:
 
     return model
 
-def model_loss_optimizer_resnet(resnet_depth, device, weight_pos, lr, show_model_summary):
+def model_loss_optimizer_resnet(ch_size, resnet_depth, device, weight_pos, lr, show_model_summary):
     # 1채널 입력(흑백 FLAIR slice)에 맞춘 ResNet18 모델 생성
     # - conv1: in_channels=1 (기본은 3, RGB용)
     # - fc: out_features=1 (이진 분류 → 단일 logit 출력)
     # - to(device): 모델 파라미터를 GPU 또는 CPU로 이동 (입력 텐서와 같은 디바이스여야 함)
-    model = build_resnet_1ch(model_depth=resnet_depth, num_classes=1).to(device)
+    model = build_resnet_1ch(ch_size=ch_size, model_depth=resnet_depth, num_classes=1).to(device)
 
     # 클래스 불균형 보정을 위한 가중치
     # - BCEWithLogitsLoss에서 양성 클래스 손실에 곱해짐

@@ -1,0 +1,29 @@
+=== Validation (best) Metrics ===
+ACC: 0.8468
+PREC: 0.4722
+REC: 0.8193
+F1: 0.5991
+AUC: 0.9192
+CM:
+[[435  76]
+ [ 15  68]]
+
+=== Test Metrics ===
+ACC: 0.8525
+PREC: 0.4677
+REC: 0.7976
+F1: 0.5897
+AUC: 0.9313
+CM:
+[[1887  305]
+ [  68  268]]
+
+=== Classification Report (thr=0.5) ===
+              precision    recall  f1-score   support
+
+           0     0.9652    0.8609    0.9101      2192
+           1     0.4677    0.7976    0.5897       336
+
+    accuracy                         0.8525      2528
+   macro avg     0.7165    0.8292    0.7499      2528
+weighted avg     0.8991    0.8525    0.8675      2528
