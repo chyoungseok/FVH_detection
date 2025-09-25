@@ -1,7 +1,9 @@
-01_data/
+01_data/*
+!01_data/.gitkeep
 02_results/**/*.pt
 02_results/**/*.npy
 02_results/*/cam_test/
 02_results/*/ig_test/
 02_results/*/cam_test_trio/
 
+model_02_ReportGuideNet/ReportGuidedNet/

@@ -1,0 +1,28 @@
+data:
+  root_dir: "/zdisk/users/ext_user_03/01_yschoi/project_01_FVH_detection/01_data/04_flair_preproc_slices"   # subject1/*.npy 저장된 루트
+  num_workers: 0                                   # shm 부족하면 0, 아니면 2~4 가능
+
+model:
+  backbone: resnet18
+  in_channels: 1
+  pretrained: false
+
+train:
+  batch_size: 64
+  epochs: 50
+  lr: 1.0e-3
+  weight_decay: 1.0e-4
+  optimizer: adamw
+  scheduler: cosine
+  step_size: 20
+  gamma: 0.1
+  warmup_epochs: 3
+  amp: true
+  seed: 42
+  pos_weight_auto: true
+
+ddp:
+  backend: nccl
+
+out:
+  output_dir: runs/exp01
