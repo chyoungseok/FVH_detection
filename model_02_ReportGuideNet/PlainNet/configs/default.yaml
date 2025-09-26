@@ -1,5 +1,5 @@
 data:
-  root_dir: "/zdisk/users/ext_user_03/01_yschoi/project_01_FVH_detection/01_data/04_flair_preproc_slices"   # subject1/*.npy 저장된 루트
+  root_dir: "/zdisk/users/ext_user_03/01_yschoi/project_01_FVH_detection/01_data/05_flair_preproc_slices_compressed"   # subject1/*.npy 저장된 루트
   num_workers: 0                                   # shm 부족하면 0, 아니면 2~4 가능
 
 model:
@@ -22,7 +22,8 @@ train:
   pos_weight_auto: true
 
 ddp:
-  backend: nccl
+  enabled: false        # DDP 끔
+  backend: nccl         # 무시됨
 
 out:
   output_dir: runs/exp01

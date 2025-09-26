@@ -7,3 +7,5 @@
 02_results/*/cam_test_trio/
 
 model_02_ReportGuideNet/ReportGuidedNet/
+
+model_02_ReportGuideNet/PlainNet/runs/
