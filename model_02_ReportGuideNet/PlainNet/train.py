@@ -1,36 +1,59 @@
-import argparse
 import os
+# --- CPU 스레드 제한 (과부하 방지) ---
+os.environ["OMP_NUM_THREADS"] = "2"
+os.environ["MKL_NUM_THREADS"] = "2"
+
+import torch
+import torch
+torch.set_num_threads(2)
+
+import argparse
 import yaml
 import csv
 
 import pandas as pd
 import matplotlib.pyplot as plt
 
-import torch
 import torch.optim as optim
 from torch.utils.data import DataLoader, DistributedSampler, RandomSampler, SequentialSampler
 
-from datasets.flair2d_binary import FlairNPYSliceDataset, compute_pos_weight_from_dataset
+from datasets.flair2d_binary import FlairNPYSliceDataset, compute_pos_weight_from_dataset, FlairH5SliceDataset
 from models.plainnet import resnet, resnet_transformer
+from models.vit import ViTBinaryClassifier
 from engine.train_loop import train_one_epoch, evaluate
 from utils.common import (
     seed_everything, setup_distributed, cleanup_distributed,
     is_main_process, save_checkpoint
 )
+from swin_transformer_pytorch import SwinTransformer
 
 
 def build_scheduler(optimizer, cfg_train):
     name = (cfg_train.get("scheduler", "none") or "none").lower()
+
     if name == "cosine":
         from torch.optim.lr_scheduler import CosineAnnealingLR
         return CosineAnnealingLR(optimizer, T_max=cfg_train["epochs"])
+
     elif name == "step":
         from torch.optim.lr_scheduler import StepLR
-        return StepLR(optimizer,
-                      step_size=cfg_train.get("step_size", 20),
-                      gamma=cfg_train.get("gamma", 0.1))
-    return None
+        return StepLR(
+            optimizer,
+            step_size=cfg_train.get("step_size", 20),
+            gamma=cfg_train.get("gamma", 0.1)
+        )
 
+    elif name == "plateau":
+        from torch.optim.lr_scheduler import ReduceLROnPlateau
+        return ReduceLROnPlateau(
+            optimizer,
+            mode="min",                  # validation loss 최소화 기준
+            factor=cfg_train.get("factor", 0.5),
+            patience=cfg_train.get("patience", 5),
+            verbose=True
+        )
+
+    return None
 
 def plot_curves(metrics_file, outdir):
     df = pd.read_csv(metrics_file)
@@ -68,7 +91,6 @@ def plot_curves(metrics_file, outdir):
     plt.savefig(os.path.join(outdir, "f1_curve.png"))
     plt.close()
 
-
 def main(args):
     with open(args.config, "r") as f:
         cfg = yaml.safe_load(f)
@@ -92,28 +114,60 @@ def main(args):
     # --- Dataset ---
     dcfg = cfg["data"]
 
-    train_ds = FlairNPYSliceDataset(
+    # --- Dataset ---
+    dcfg = cfg["data"]
+
+    # train_ds = FlairNPYSliceDataset(
+    #     root_dir=dcfg.get("root_dir", ""),
+    #     split="train",
+    #     seed=cfg["train"].get("seed", 42),
+    #     stratified_split=dcfg.get("stratified_split", True),
+    #     undersample=dcfg.get("undersample", True),
+    #     undersample_ratio=dcfg.get("undersample_ratio", 1.0)   # ✅ ratio 전달
+    # )
+    # val_ds = FlairNPYSliceDataset(
+    #     root_dir=dcfg.get("root_dir", ""),
+    #     split="val",
+    #     seed=cfg["train"].get("seed", 42),
+    #     stratified_split=dcfg.get("stratified_split", True),
+    #     undersample=dcfg.get("undersample", True),
+    #     undersample_ratio=dcfg.get("undersample_ratio", 1.0)   # ✅ ratio 전달
+    # )
+    # test_ds = FlairNPYSliceDataset(
+    #     root_dir=dcfg.get("root_dir", ""),
+    #     split="test",
+    #     seed=cfg["train"].get("seed", 42),
+    #     stratified_split=dcfg.get("stratified_split", True),
+    #     undersample=dcfg.get("undersample", True),
+    #     undersample_ratio=dcfg.get("undersample_ratio", 1.0)   # ✅ ratio 전달
+    # )
+    
+    train_ds = FlairH5SliceDataset(
         root_dir=dcfg.get("root_dir", ""),
         split="train",
         seed=cfg["train"].get("seed", 42),
-        stratified_split=dcfg.get("stratified_split", False),
-        undersample=dcfg.get("undersample", False)  # ✅ config에서 undersample 옵션 전달
+        stratified_split=dcfg.get("stratified_split", True),
+        undersample=dcfg.get("undersample", True),
+        undersample_ratio=dcfg.get("undersample_ratio", 1.0)   # ✅ ratio 전달
     )
-    val_ds = FlairNPYSliceDataset(
+    val_ds = FlairH5SliceDataset(
         root_dir=dcfg.get("root_dir", ""),
         split="val",
         seed=cfg["train"].get("seed", 42),
-        stratified_split=dcfg.get("stratified_split", False),
-        undersample=False   # val/test에서는 undersample X
+        stratified_split=dcfg.get("stratified_split", True),
+        undersample=dcfg.get("undersample", True),
+        undersample_ratio=dcfg.get("undersample_ratio", 1.0)   # ✅ ratio 전달
     )
-    test_ds = FlairNPYSliceDataset(
+    test_ds = FlairH5SliceDataset(
         root_dir=dcfg.get("root_dir", ""),
         split="test",
         seed=cfg["train"].get("seed", 42),
-        stratified_split=dcfg.get("stratified_split", False),
-        undersample=False
+        stratified_split=dcfg.get("stratified_split", True),
+        undersample=dcfg.get("undersample", True),
+        undersample_ratio=dcfg.get("undersample_ratio", 1.0)   # ✅ ratio 전달
     )
-
+    
+    
     if ddp_enabled:
         train_sampler = DistributedSampler(train_ds, shuffle=True, drop_last=False)
         val_sampler = DistributedSampler(val_ds, shuffle=False, drop_last=False)
@@ -138,13 +192,31 @@ def main(args):
 
     # --- Model ---
     mcfg = cfg["model"]
-    if mcfg.get("transformer", {}).get("enabled", False):
+    if mcfg.get("swin", {}).get("enabled", False):
+        swin_cfg = mcfg.get("swin", {})
+        model = SwinTransformer(
+            hidden_dim=swin_cfg.get("hidden_dim", 96),
+            layers=swin_cfg.get("layers", [2, 2, 6, 2]),
+            heads=swin_cfg.get("heads", [3, 6, 12, 24]),
+            channels=swin_cfg.get("channels", 1),
+            num_classes=swin_cfg.get("num_classes", 2),
+            head_dim=swin_cfg.get("head_dim", 32),
+            window_size=swin_cfg.get("window_size", 7),
+            downscaling_factors=swin_cfg.get("downscaling_factors", [4, 2, 2, 2]),
+            relative_pos_embedding=swin_cfg.get("relative_pos_embedding", True)
+        ).to(device)
+        
+    elif mcfg.get("vit", {}).get("enabled", False):
+        model = ViTBinaryClassifier(pretrained=mcfg.get("pretrained", True)).to(device)
+        
+    elif mcfg.get("transformer", {}).get("enabled", False):
         model = resnet_transformer(
             backbone=mcfg.get("backbone", "resnet18"),
             in_channels=mcfg.get("in_channels", 1),
             pretrained=mcfg.get("pretrained", False),
             transformer_cfg=mcfg.get("transformer", {})
         ).to(device)
+        
     else:
         model = resnet(
             backbone=mcfg.get("backbone", "resnet18"),
@@ -198,64 +270,69 @@ def main(args):
     best_auc = -1.0
     epochs = tcfg["epochs"]
     amp = bool(tcfg.get("amp", True))
+    type_loss = tcfg.get("loss", 'bce')
 
     for epoch in range(epochs):
         if ddp_enabled:
             train_sampler.set_epoch(epoch)
 
         tr = train_one_epoch(model, train_loader, optimizer, device, epoch,
-                             amp=amp, pos_weight=pos_weight)
-        val_metrics = evaluate(model, val_loader, device, pos_weight=pos_weight)
+                             amp=amp, pos_weight=pos_weight, type_loss=type_loss)
+        val_metrics = evaluate(model, val_loader, device, pos_weight=pos_weight, type_loss=type_loss)
 
+        # --- Scheduler step ---
         if scheduler is not None:
-            scheduler.step()
+            if isinstance(scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
+                scheduler.step(val_metrics["loss"])
+            else:
+                scheduler.step()
 
-        if is_main_process() or not ddp_enabled:
-            print(f"[Epoch {epoch+1:03d}/{epochs}] "
-                  f"train_loss={tr['loss']:.4f}  "
-                  f"train_acc={tr.get('acc@0.5', float('nan')):.4f}  "
-                  f"train_f1={tr.get('f1@0.5', float('nan')):.4f}  "
-                  f"train_f1_best={tr.get('f1_best', float('nan')):.4f}  "
-                  f"val_loss={val_metrics['loss']:.4f}  "
-                  f"val_acc={val_metrics.get('acc@0.5', float('nan')):.4f}  "
-                  f"val_auc={val_metrics.get('auc', float('nan')):.4f}  "
-                  f"val_ap={val_metrics.get('ap', float('nan')):.4f}  "
-                  f"val_f1={val_metrics.get('f1@0.5', float('nan')):.4f}  "
-                  f"val_f1_best={val_metrics.get('f1_best', float('nan')):.4f}  "
-                  f"val_thr_best={val_metrics.get('thr_best', 0.5):.3f}")
+            if is_main_process() or not ddp_enabled:
+                print(f"[Epoch {epoch+1:03d}/{epochs}] "
+                    f"train_loss={tr['loss']:.4f}  "
+                    f"train_acc={tr.get('acc@0.5', float('nan')):.4f}  "
+                    f"train_f1={tr.get('f1@0.5', float('nan')):.4f}  "
+                    f"train_f1_best={tr.get('f1_best', float('nan')):.4f}  "
+                    f"val_loss={val_metrics['loss']:.4f}  "
+                    f"val_acc={val_metrics.get('acc@0.5', float('nan')):.4f}  "
+                    f"val_auc={val_metrics.get('auc', float('nan')):.4f}  "
+                    f"val_ap={val_metrics.get('ap', float('nan')):.4f}  "
+                    f"val_f1={val_metrics.get('f1@0.5', float('nan')):.4f}  "
+                    f"val_f1_best={val_metrics.get('f1_best', float('nan')):.4f}  "
+                    f"val_thr_best={val_metrics.get('thr_best', 0.5):.3f}")
 
-            with open(metrics_file, "a", newline="") as f:
-                writer = csv.writer(f)
-                writer.writerow([
-                    epoch+1,
-                    tr.get("loss", float("nan")),
-                    tr.get("acc@0.5", float("nan")),
-                    tr.get("f1@0.5", float("nan")),
-                    tr.get("f1_best", float("nan")),
-                    val_metrics.get("loss", float("nan")),
-                    val_metrics.get("acc@0.5", float("nan")),
-                    val_metrics.get("auc", float("nan")),
-                    val_metrics.get("ap", float("nan")),
-                    val_metrics.get("f1@0.5", float("nan")),
-                    val_metrics.get("f1_best", float("nan")),
-                    val_metrics.get("thr_best", 0.5),
-                ])
+                with open(metrics_file, "a", newline="") as f:
+                    writer = csv.writer(f)
+                    writer.writerow([
+                        epoch+1,
+                        tr.get("loss", float("nan")),
+                        tr.get("acc@0.5", float("nan")),
+                        tr.get("f1@0.5", float("nan")),
+                        tr.get("f1_best", float("nan")),
+                        val_metrics.get("loss", float("nan")),
+                        val_metrics.get("acc@0.5", float("nan")),
+                        val_metrics.get("auc", float("nan")),
+                        val_metrics.get("ap", float("nan")),
+                        val_metrics.get("f1@0.5", float("nan")),
+                        val_metrics.get("f1_best", float("nan")),
+                        val_metrics.get("thr_best", 0.5),
+                    ])
 
-            if epoch == epochs - 1:
-                plot_curves(metrics_file, outdir)
+                if epoch == epochs - 1:
+                    plot_curves(metrics_file, outdir)
 
-            ckpt_dict = {
-                "model": model.module.state_dict() if ddp_enabled else model.state_dict(),
-                "epoch": epoch,
-                "val_metrics": val_metrics,
-                "cfg": cfg,
-            }
-            save_checkpoint(ckpt_dict, os.path.join(outdir, "last.pth"))
+                ckpt_dict = {
+                    "model": model.module.state_dict() if ddp_enabled else model.state_dict(),
+                    "epoch": epoch,
+                    "val_metrics": val_metrics,
+                    "cfg": cfg,
+                }
+                save_checkpoint(ckpt_dict, os.path.join(outdir, "last.pth"))
 
-            auc_score = val_metrics.get("auc", -1.0)
-            if auc_score is not None and auc_score > best_auc:
-                best_auc = auc_score
-                save_checkpoint(ckpt_dict, os.path.join(outdir, "best.pth"))
+                auc_score = val_metrics.get("auc", -1.0)
+                if auc_score is not None and auc_score > best_auc:
+                    best_auc = auc_score
+                    save_checkpoint(ckpt_dict, os.path.join(outdir, "best.pth"))
 
     if ddp_enabled:
         cleanup_distributed()

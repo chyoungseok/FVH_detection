@@ -1,0 +1,55 @@
+data:
+  root_dir: "/zdisk/users/ext_user_03/01_yschoi/project_01_FVH_detection/01_data/05_flair_preproc_slices_compressed"
+  num_workers: 0
+  stratified_split: true   # stratified split 사용 여부
+  undersample: true
+  undersample_ratio: 3.0   # pos:neg 비율
+
+model:
+  backbone: resnet18
+  in_channels: 1
+  pretrained: false
+  transformer:                 # Transformer 관련 설정 추가
+    enabled: false              # Transformer 사용 여부
+    num_layers: 2              # Encoder layer 개수 (작게 시작)
+    d_model: 256               # hidden dimension
+    nhead: 4                   # multi-head attention head 수
+    dim_feedforward: 1024      # feedforward dimension
+    dropout: 0.1               # dropout 비율
+    pooling: mean              # "mean", "cls", "max" 중 선택
+  
+  swin:
+    enabled: True
+    hidden_dim: 96
+    layers: [2, 2, 6, 2]
+    heads: [3, 6, 12, 24]
+    channels: 1
+    num_classes: 1
+    head_dim: 32
+    window_size: 7
+    downscaling_factors: [4, 2, 2, 2]
+    relative_pos_embedding: true
+
+train:
+    batch_size: 8
+    epochs: 300
+    lr: 1.0e-4
+    weight_decay: 1.0e-4
+    optimizer: adamw
+    scheduler: cosine   # cosine / step / plateau / none
+    step_size: 20
+    gamma: 0.1
+    factor: 0.5          # plateau에서 사용
+    patience: 5          # plateau에서 사용
+    warmup_epochs: 3
+    amp: true
+    seed: 42
+    pos_weight_auto: true
+    gpus: 3
+
+ddp:
+  enabled: false
+  backend: nccl
+
+out:
+  output_dir: runs/swin_transformer_04

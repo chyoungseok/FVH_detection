@@ -1,51 +1,44 @@
+import cv2
+import numpy as np
 import torch
 import torch.nn.functional as F
+from torchvision import transforms
 
 class GradCAM:
-    """
-    Minimal Grad-CAM for PlainNet (uses the last conv block of ResNet).
-    """
-    def __init__(self, model):
+    def __init__(self, model, target_layer):
         self.model = model
-        self.model.eval()
+        self.target_layer = target_layer
+
         self.gradients = None
         self.activations = None
-        self.target_module = self.model.backbone.layer4[-1].conv2
-        self.hook_handlers = []
-        self._register_hooks()
 
-    def _register_hooks(self):
-        def fwd_hook(module, inputs, output):
-            self.activations = output.detach()
-        def bwd_hook(module, grad_in, grad_out):
-            self.gradients = grad_out[0].detach()
-        self.hook_handlers.append(self.target_module.register_forward_hook(fwd_hook))
-        self.hook_handlers.append(self.target_module.register_full_backward_hook(bwd_hook))
+        # hook 등록
+        target_layer.register_forward_hook(self.save_activation)
+        target_layer.register_backward_hook(self.save_gradient)
 
-    def remove_hooks(self):
-        for h in self.hook_handlers:
-            h.remove()
+    def save_activation(self, module, input, output):
+        self.activations = output.detach()
 
-    @torch.no_grad()
-    def _normalize(self, x):
-        x_min, x_max = x.min(), x.max()
-        if (x_max - x_min) < 1e-6:
-            return torch.zeros_like(x)
-        return (x - x_min) / (x_max - x_min)
+    def save_gradient(self, module, grad_input, grad_output):
+        self.gradients = grad_output[0].detach()
 
-    def __call__(self, x: torch.Tensor):
-        """
-        x: [1, 1, H, W]
-        returns heatmap: [H, W] in [0,1]
-        """
-        self.model.zero_grad(set_to_none=True)
-        logits = self.model(x)
-        score = logits[0]
-        score.backward(retain_graph=True)
-
-        weights = self.gradients.mean(dim=(2, 3), keepdim=True)  # [C,1,1]
-        cam = (weights * self.activations).sum(dim=1, keepdim=True)  # [1,1,H',W']
+    def generate(self, class_score):
+        # Grad-CAM 계산
+        weights = self.gradients.mean(dim=(2, 3), keepdim=True)  # GAP over H, W
+        cam = (weights * self.activations).sum(dim=1, keepdim=True)  # [B,1,H,W]
         cam = F.relu(cam)
-        cam = F.interpolate(cam, size=x.shape[-2:], mode="bilinear", align_corners=False)
-        heatmap = self._normalize(cam.squeeze(0).squeeze(0))
-        return heatmap.cpu()
+
+        # Normalize 0~1
+        cam -= cam.min()
+        cam /= cam.max() + 1e-8
+        return cam
+
+def overlay_cam_on_image(img, cam):
+    """img: numpy (H,W), cam: torch (1,H,W)"""
+    cam = cam.squeeze().cpu().numpy()
+    cam = cv2.resize(cam, img.shape[::-1])  # (W,H)
+
+    heatmap = cv2.applyColorMap(np.uint8(255 * cam), cv2.COLORMAP_JET)
+    heatmap = cv2.cvtColor(heatmap, cv2.COLOR_BGR2RGB)
+    overlay = 0.4 * heatmap + 0.6 * np.stack([img*255]*3, axis=-1)
+    return overlay.astype(np.uint8)
