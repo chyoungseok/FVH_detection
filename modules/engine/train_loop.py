@@ -17,7 +17,6 @@ def get_criterion(type_loss, device, pos_weight=None):
             pos_weight=pos_weight.to(device) if pos_weight is not None else None
             )
 
-
 def train_one_epoch(
     model: torch.nn.Module,
     loader: DataLoader,
@@ -64,6 +63,8 @@ def train_one_epoch(
     # --- 전체 epoch metric 계산 ---
     y_prob = np.concatenate(prob_all, axis=0).reshape(-1)
     y_true = np.concatenate(y_all, axis=0).reshape(-1)
+    
+    # save metrics
     metrics = compute_binary_metrics_from_probs(y_true, y_prob)
     metrics["loss"] = loss_meter.avg
 
@@ -118,16 +119,10 @@ def evaluate(model, dataloader, device, pos_weight=None, type_loss="bce", return
 
     y_pred_final = (y_prob >= best_thr).astype(int)
 
-    metrics = {
-        "loss": total_loss / len(dataloader.dataset),
-        "auc": auc,
-        "ap": ap,
-        "f1@0.5": f1_score(y_true, (y_prob >= 0.5).astype(int), zero_division=0),
-        "f1_best": best_f1,
-        "thr_best": best_thr,
-        "acc@0.5": accuracy_score(y_true, (y_prob >= 0.5).astype(int)),
-    }
-
+    # save metrics 
+    metrics = compute_binary_metrics_from_probs(y_true, y_prob)
+    metrics["loss"] = total_loss / len(dataloader.dataset)
+    
     # --- return_preds 옵션 처리 ---
     if return_preds:
         metrics["y_true"] = y_true

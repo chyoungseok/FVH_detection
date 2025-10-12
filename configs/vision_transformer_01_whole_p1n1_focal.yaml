@@ -3,22 +3,17 @@ data:
   num_workers: 0
   stratified_split: true   # stratified split 사용 여부
   undersample: true
-  undersample_ratio: 3.0   # pos:neg 비율
+  undersample_ratio: 1.0   # pos:neg 비율
 
 model:
-  backbone: resnet18
-  in_channels: 1
-  pretrained: false
-  transformer:                 # Transformer 관련 설정 추가
-    enabled: false              # Transformer 사용 여부
-    num_layers: 2              # Encoder layer 개수 (작게 시작)
-    d_model: 256               # hidden dimension
-    nhead: 4                   # multi-head attention head 수
-    dim_feedforward: 1024      # feedforward dimension
-    dropout: 0.1               # dropout 비율
-    pooling: mean            # "mean", "cls", "max" 중 선택
+  resnet:
+    enabled: false
+    backbone: resnet18
+    in_channels: 1
+    pretrained: false
   
   vit:
+    pretrained: false
     enabled: true
   
   swin:
@@ -34,8 +29,8 @@ model:
     relative_pos_embedding: true
 
 train:
-    batch_size: 8
-    epochs: 2
+    batch_size: 64
+    epochs: 30
     lr: 1.0e-4
     weight_decay: 1.0e-4
     optimizer: adamw
@@ -48,12 +43,8 @@ train:
     amp: true
     seed: 42
     pos_weight_auto: true
-    gpus: 3
+    gpus: 0
     loss: "focal" # bce/ focal
-
-ddp:
-  enabled: false
-  backend: nccl
-
+    
 out:
-  output_dir: runs/vision_transformer_02_whole_p1n3_focal
+  output_dir: runs/vision_transformer_01_whole_p1n1_focal

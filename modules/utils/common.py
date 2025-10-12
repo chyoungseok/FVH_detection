@@ -71,3 +71,4 @@ class AverageMeter:
     @property
     def avg(self):
         return self.sum / max(1, self.cnt)
+
