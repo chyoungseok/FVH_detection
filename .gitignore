@@ -9,3 +9,8 @@
 model_02_ReportGuideNet/ReportGuidedNet/
 
 model_02_ReportGuideNet/PlainNet/runs/
+
+
+runs/
+model_save/
+99_legacy/
