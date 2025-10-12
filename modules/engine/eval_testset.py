@@ -53,6 +53,27 @@ def save_roc_curve(y_true, y_prob, outdir):
     plt.savefig(png_path)
     plt.close()
     print(f"[INFO] ROC curve saved at {png_path}")
+    
+def save_test_metrics_to_csv(metrics: dict, outdir: str):
+    """
+    metrics 딕셔너리에서 숫자형 항목만 추출해 CSV로 저장하는 함수.
+
+    Args:
+        metrics (dict): evaluate() 결과 딕셔너리
+        outdir (str): 저장 경로
+    """
+    
+    # 숫자형 값만 필터링
+    numeric_metrics = {k: v for k, v in metrics.items() if isinstance(v, (float, int))}
+    
+    # DataFrame 생성 (1행)
+    df = pd.DataFrame([numeric_metrics])
+
+    # CSV 저장
+    out_path = os.path.join(outdir, "test_metrics.csv")
+    df.to_csv(out_path, index=False)
+
+    print(f"[INFO] Test metrics saved to: {out_path}")
 
 def run_eval_on_testset(cfg, model, device, pos_weight, test_loader):
     # --- Load checkpoint ---
@@ -80,3 +101,4 @@ def run_eval_on_testset(cfg, model, device, pos_weight, test_loader):
     outdir = cfg["out"]["output_dir"]
     save_confusion_matrix(y_true, y_pred, outdir)
     save_roc_curve(y_true, y_prob, outdir)
+    save_test_metrics_to_csv(metrics, outdir)

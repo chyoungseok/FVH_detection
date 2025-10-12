@@ -39,26 +39,31 @@ def train_one_epoch(
         y = batch["label"].to(device, non_blocking=True)
 
         optimizer.zero_grad(set_to_none=True)
+
+        # --- 자동 mixed precision ---
         with autocast(enabled=amp):
             logits = model(x)
-            
+
             # --- 자동 shape 맞추기 ---
             if logits.ndim == 2 and logits.size(1) == 1:
                 logits = logits.view(-1)     # (B,1) → (B,)
             if y.ndim == 2 and y.size(1) == 1:
                 y = y.view(-1)               # (B,1) → (B,)
-            
+
             loss = criterion(logits, y)
 
+        # --- 스케일링된 backward ---
         scaler.scale(loss).backward()
         scaler.step(optimizer)
         scaler.update()
 
+        # --- 로그 및 결과 저장 ---
         loss_meter.update(loss.item(), n=x.size(0))
 
-        probs = torch.sigmoid(logits)
-        prob_all.append(probs.detach().cpu().numpy())
-        y_all.append(y.detach().cpu().numpy())
+        with torch.no_grad():
+            probs = torch.sigmoid(logits)
+            prob_all.append(probs.detach().cpu().numpy())
+            y_all.append(y.detach().cpu().numpy())
 
     # --- 전체 epoch metric 계산 ---
     y_prob = np.concatenate(prob_all, axis=0).reshape(-1)

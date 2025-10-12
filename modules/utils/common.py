@@ -1,4 +1,4 @@
-import os
+import os, argparse
 import random
 from typing import Any, Dict
 
@@ -72,3 +72,13 @@ class AverageMeter:
     def avg(self):
         return self.sum / max(1, self.cnt)
 
+
+def str2bool(v):
+    if isinstance(v, bool):
+        return v
+    if v.lower() in ('yes', 'true', 't', '1', 'y'):
+        return True
+    elif v.lower() in ('no', 'false', 'f', '0', 'n'):
+        return False
+    else:
+        raise argparse.ArgumentTypeError('Boolean value expected.')

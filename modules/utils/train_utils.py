@@ -8,6 +8,7 @@ import torch.optim as optim
 from swin_transformer_pytorch import SwinTransformer
 from modules.models.vit import ViTBinaryClassifier
 from modules.models.resnet import resnet
+from modules.models.vitgru import ViTGRU
 
 # -- Model Selection ---
 def ModelSelection(cfg, device):
@@ -40,6 +41,22 @@ def ModelSelection(cfg, device):
             backbone=resnet_cfg.get("backbone", "resnet18"),
             in_channels=resnet_cfg.get("in_channels", 1),
             pretrained=resnet_cfg.get("pretrained", False)
+        ).to(device)
+        
+    # --- ViT-GRU
+    elif mcfg.get("vitgru", {}).get("enabled", False):
+        vcfg = mcfg["vitgru"]
+        model = ViTGRU(
+            in_channels=vcfg.get("in_channels", 1),
+            img_size=vcfg.get("img_size", 672),
+            patch_size=vcfg.get("patch_size", 8),       # 논문 설정
+            embed_dim=vcfg.get("embed_dim", 64),        # 논문 설정
+            num_heads=vcfg.get("num_heads", 4),
+            num_layers=vcfg.get("num_layers", 8),
+            gru_hidden=vcfg.get("gru_hidden", 1024),
+            bidirectional=vcfg.get("bidirectional", False),
+            dropout=vcfg.get("dropout", 0.3),
+            num_classes=vcfg.get("num_classes", 1)
         ).to(device)
 
     return model
@@ -134,6 +151,7 @@ def log_epoch_metrics(epoch: int,
     """
     print(
         f"[Epoch {epoch+1:03d}/{epochs}] "
+        f"\n"
         f"train_loss={tr_metrics.get('loss', float('nan')):.4f}  "
         f"train_acc={tr_metrics.get('acc', float('nan')):.4f}  "
         f"train_precision={tr_metrics.get('precision', float('nan')):.4f}  "
@@ -142,13 +160,13 @@ def log_epoch_metrics(epoch: int,
         f"train_f1={tr_metrics.get('f1', float('nan')):.4f}  "
         f"train_f1_best={tr_metrics.get('f1_best', float('nan')):.4f}  "
         f"\n"
-        f"val_loss={val_metrics.get('loss', float('nan')):.4f}  "
-        f"val_acc={val_metrics.get('acc', float('nan')):.4f}  "
-        f"val_precision={val_metrics.get('precision', float('nan')):.4f}  "
-        f"val_recall={val_metrics.get('recall', float('nan')):.4f}  "
-        f"val_auc={val_metrics.get('auc', float('nan')):.4f}  "
-        f"val_f1={val_metrics.get('f1', float('nan')):.4f}  "
-        f"val_f1_best={val_metrics.get('f1_best', float('nan')):.4f}  "
+        f"  val_loss={val_metrics.get('loss', float('nan')):.4f}  "
+        f"  val_acc={val_metrics.get('acc', float('nan')):.4f}  "
+        f"  val_precision={val_metrics.get('precision', float('nan')):.4f}  "
+        f"  val_recall={val_metrics.get('recall', float('nan')):.4f}  "
+        f"  val_auc={val_metrics.get('auc', float('nan')):.4f}  "
+        f"  val_f1={val_metrics.get('f1', float('nan')):.4f}  "
+        f"  val_f1_best={val_metrics.get('f1_best', float('nan')):.4f}  "
     )
     
 

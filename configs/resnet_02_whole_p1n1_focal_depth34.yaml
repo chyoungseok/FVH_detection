@@ -8,7 +8,7 @@ data:
 model:
   resnet:
     enabled: false
-    backbone: resnet18
+    backbone: resnet34
     in_channels: 1
     pretrained: false
   
@@ -30,7 +30,7 @@ model:
 
 train:
     batch_size: 64
-    epochs: 30
+    epochs: 100
     lr: 1.0e-4
     weight_decay: 1.0e-4
     optimizer: adamw
@@ -43,8 +43,8 @@ train:
     amp: true
     seed: 42
     pos_weight_auto: true
-    gpus: 0
+    gpus: 2
     loss: "focal" # bce/ focal
     
 out:
-  output_dir: runs/vision_transformer_01_whole_p1n1_focal
+  output_dir: runs/resnet_02_whole_p1n1_focal_depth34.yaml
