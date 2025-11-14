@@ -28,11 +28,13 @@ def ModelSelection(cfg, device):
             downscaling_factors=swin_cfg.get("downscaling_factors", [4, 2, 2, 2]),
             relative_pos_embedding=swin_cfg.get("relative_pos_embedding", True)
         ).to(device)
+        model_name = "swin"
     
     # -- Vision Transformer
     elif mcfg.get("vit", {}).get("enabled", False):
         vit_cfg = mcfg["vit"]
         model = ViTBinaryClassifier(pretrained=vit_cfg.get("pretrained", True)).to(device)
+        model_name = "vit"
     
     # -- Resnet
     elif mcfg.get("resnet", {}).get("enabled", False):
@@ -42,6 +44,7 @@ def ModelSelection(cfg, device):
             in_channels=resnet_cfg.get("in_channels", 1),
             pretrained=resnet_cfg.get("pretrained", False)
         ).to(device)
+        model_name = "resnet"
         
     # --- ViT-GRU
     elif mcfg.get("vitgru", {}).get("enabled", False):
@@ -58,8 +61,9 @@ def ModelSelection(cfg, device):
             dropout=vcfg.get("dropout", 0.3),
             num_classes=vcfg.get("num_classes", 1)
         ).to(device)
+        model_name = "vitgru"
 
-    return model
+    return model, model_name
 
 # --- Optimizer 설정 ---
 def build_optimizer(cfg, model):

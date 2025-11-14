@@ -43,8 +43,11 @@ train:
     amp: true
     seed: 42
     pos_weight_auto: true
-    gpus: 1
+    gpus: 3
     loss: "focal" # bce/ focal
+
+gradCAM:
+    target_layer: "layer4"
     
 out:
   output_dir: runs/resnet_03_whole_p1n2_focal_depth34_batch8.yaml

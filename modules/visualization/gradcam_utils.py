@@ -106,7 +106,7 @@ def overlay_cam_on_image(img: np.ndarray, cam: np.ndarray, alpha: float = 0.5) -
 # Helper for batch processing & saving
 # ======================================================
 def generate_and_save_cam(model, gradcam, img_tensor, raw_img_np, sid, gt_label, pred_label, save_dir):
-    '''
+    """
     Generate Grad-CAM for a single test image and save it
 
     Args:
@@ -118,7 +118,7 @@ def generate_and_save_cam(model, gradcam, img_tensor, raw_img_np, sid, gt_label,
         gt_label (int): ground truth label (0 or 1)
         pred_label (int): predicted label (0 or 1)
         save_dir (str): output directory
-    '''
+    """
     
     os.makedirs(save_dir, exist_ok=True)
     model.eval()

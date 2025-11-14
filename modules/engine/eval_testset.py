@@ -77,12 +77,12 @@ def apply_gradcam_on_testset(model, test_loader, device, cfg):
     모든 테스트 이미지(batch 포함)에 대해 Grad-CAM을 생성하고 저장
     """
     model.eval()
-    gradcam_outdir = os.path.join(cfg["out"]["output_dir"], "gradCAM")
+    gradcam_outdir = os.path.join(cfg["out"]["output_dir"], f"gradCAM_{cfg['gradCAM']['target_layer']}")
     os.makedirs(gradcam_outdir, exist_ok=True)
 
     # --- Try to locate target layer automatically ---
     if isinstance(model, torch.nn.DataParallel):
-        backbone = getattr(model.module, "backbone", None)
+        backbone = getattr(model.module, "backbone", None) # 다중 gpu를 활용하는 경우 (현재 이 기능을 사용하지 않지만, 추후 사용할 수 있으므로 해당 코드 블록은 남겨두자.)
     else:
         backbone = getattr(model, "backbone", None)
 
@@ -90,7 +90,7 @@ def apply_gradcam_on_testset(model, test_loader, device, cfg):
         print("[WARN] Grad-CAM not supported: model has no backbone attribute.")
         return
 
-    target_layer = getattr(backbone, "layer4", None)
+    target_layer = getattr(backbone, cfg["gradCAM"]["target_layer"], None)
     if target_layer is None:
         print("[WARN] Grad-CAM not supported for this model type.")
         return
@@ -127,7 +127,8 @@ def apply_gradcam_on_testset(model, test_loader, device, cfg):
                 pred_label=pred,
                 save_dir=gradcam_outdir
             )
-            print(f"[CAM] Saved: {os.path.basename(cam_path)}")
+            if i==imgs.size(0)-1:
+                print(f"[CAM] Saved: {os.path.basename(cam_path)}")
 
     print(f"[INFO] All Grad-CAM results saved under: {gradcam_outdir}")
 
@@ -137,7 +138,7 @@ def apply_gradcam_on_testset(model, test_loader, device, cfg):
 # ============================================================
 # 🧪 3️⃣ Main evaluation entrypoint
 # ============================================================
-def run_eval_on_testset(cfg, model, device, pos_weight, test_loader):
+def run_eval_on_testset(cfg, model, model_name, device, pos_weight, test_loader):
     # --- Load checkpoint ---
     ckpt_path = os.path.join(cfg["out"]["output_dir"], "best.pth")
     assert os.path.exists(ckpt_path), f"Checkpoint not found: {ckpt_path}"
@@ -166,4 +167,5 @@ def run_eval_on_testset(cfg, model, device, pos_weight, test_loader):
     save_test_metrics_to_csv(metrics, outdir)
 
     # --- Apply Grad-CAM on all test samples ---
-    apply_gradcam_on_testset(model, test_loader, device, cfg)
+    if "resnet" in model_name:
+        apply_gradcam_on_testset(model, test_loader, device, cfg)

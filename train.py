@@ -31,7 +31,7 @@ def main(args):
     pos_weight = compute_pos_weight_from_dataset(train_ds) if cfg["train"].get("pos_weight_auto", True) else None
 
     # --- Model Selection ---
-    model = ModelSelection(cfg, device=device)
+    model, model_name = ModelSelection(cfg, device=device)
 
     # --- Optimizer / Scheduler ---
     optimizer = build_optimizer(cfg, model)
@@ -132,6 +132,7 @@ def main(args):
     pos_weight_testset = compute_pos_weight_from_dataset(test_ds) if cfg["train"].get("pos_weight_auto", True) else None
     run_eval_on_testset(cfg=cfg,
                         model=model,
+                        model_name=model_name,
                         device=device,
                         pos_weight=pos_weight_testset,
                         test_loader=test_loader)
