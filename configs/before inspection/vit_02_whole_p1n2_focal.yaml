@@ -3,7 +3,7 @@ data:
   num_workers: 0
   stratified_split: true   # stratified split 사용 여부
   undersample: true
-  undersample_ratio: 1.0   # pos:neg 비율
+  undersample_ratio: 2.0   # pos:neg 비율
 
 model:
   resnet:
@@ -13,11 +13,11 @@ model:
     pretrained: false
   
   vit:
-    pretrained: false
     enabled: true
-  
+    pretrained: false
+    
   swin:
-    enabled: True
+    enabled: false
     hidden_dim: 96
     layers: [2, 2, 6, 2]
     heads: [3, 6, 12, 24]
@@ -30,7 +30,7 @@ model:
 
 train:
     batch_size: 64
-    epochs: 100
+    epochs: 70
     lr: 1.0e-4
     weight_decay: 1.0e-4
     optimizer: adamw
@@ -43,8 +43,8 @@ train:
     amp: true
     seed: 42
     pos_weight_auto: true
-    gpus: 2
+    gpus: 0
     loss: "focal" # bce/ focal
     
 out:
-  output_dir: runs/resnet_01_whole_p1n1_focal.yaml
+  output_dir: runs/vit_02_whole_p1n2_focal.yaml

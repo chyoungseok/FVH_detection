@@ -6,7 +6,12 @@ import seaborn as sns
 from sklearn.metrics import confusion_matrix, roc_curve, roc_auc_score
 
 from modules.engine.train_loop import evaluate
+from modules.visualization.gradcam_utils import GradCAM, generate_and_save_cam
 
+
+# ============================================================
+# 📊 1️⃣ Confusion Matrix & ROC Curve & Metrics CSV
+# ============================================================
 def save_confusion_matrix(y_true, y_pred, outdir):
     cm = confusion_matrix(y_true, y_pred)
     cm_df = pd.DataFrame(
@@ -33,7 +38,7 @@ def save_confusion_matrix(y_true, y_pred, outdir):
     plt.savefig(png_path)
     plt.close()
     print(f"[INFO] Confusion matrix heatmap saved at {png_path}")
-    
+
 
 def save_roc_curve(y_true, y_prob, outdir):
     fpr, tpr, _ = roc_curve(y_true, y_prob)
@@ -53,28 +58,85 @@ def save_roc_curve(y_true, y_prob, outdir):
     plt.savefig(png_path)
     plt.close()
     print(f"[INFO] ROC curve saved at {png_path}")
-    
+
+
 def save_test_metrics_to_csv(metrics: dict, outdir: str):
-    """
-    metrics 딕셔너리에서 숫자형 항목만 추출해 CSV로 저장하는 함수.
-
-    Args:
-        metrics (dict): evaluate() 결과 딕셔너리
-        outdir (str): 저장 경로
-    """
-    
-    # 숫자형 값만 필터링
+    """metrics 딕셔너리에서 숫자형 항목만 추출해 CSV로 저장"""
     numeric_metrics = {k: v for k, v in metrics.items() if isinstance(v, (float, int))}
-    
-    # DataFrame 생성 (1행)
     df = pd.DataFrame([numeric_metrics])
-
-    # CSV 저장
     out_path = os.path.join(outdir, "test_metrics.csv")
     df.to_csv(out_path, index=False)
-
     print(f"[INFO] Test metrics saved to: {out_path}")
 
+
+# ============================================================
+# 🔥 2️⃣ Grad-CAM Application
+# ============================================================
+def apply_gradcam_on_testset(model, test_loader, device, cfg):
+    """
+    모든 테스트 이미지(batch 포함)에 대해 Grad-CAM을 생성하고 저장
+    """
+    model.eval()
+    gradcam_outdir = os.path.join(cfg["out"]["output_dir"], "gradCAM")
+    os.makedirs(gradcam_outdir, exist_ok=True)
+
+    # --- Try to locate target layer automatically ---
+    if isinstance(model, torch.nn.DataParallel):
+        backbone = getattr(model.module, "backbone", None)
+    else:
+        backbone = getattr(model, "backbone", None)
+
+    if backbone is None:
+        print("[WARN] Grad-CAM not supported: model has no backbone attribute.")
+        return
+
+    target_layer = getattr(backbone, "layer4", None)
+    if target_layer is None:
+        print("[WARN] Grad-CAM not supported for this model type.")
+        return
+
+    gradcam = GradCAM(model.module if isinstance(model, torch.nn.DataParallel) else model,
+                      target_layer[-1])
+
+    print(f"[INFO] Generating Grad-CAM results to: {gradcam_outdir}")
+
+    for batch in test_loader:
+        imgs = batch["image"].to(device)      # [B, 1, H, W]
+        labels = batch["label"].cpu().numpy() # [B]
+        sids = batch["sid"]
+
+        # 배치 전체를 하나씩 순회
+        for i in range(imgs.size(0)):
+            img = imgs[i].unsqueeze(0)        # [1, 1, H, W]
+            label = int(labels[i])
+            sid = sids[i]
+
+            # 예측 수행
+            logits = model(img)
+            prob = torch.sigmoid(logits).item()
+            pred = int(prob >= 0.5)
+
+            # Grad-CAM 생성 및 저장
+            cam_path = generate_and_save_cam(
+                model=model.module if isinstance(model, torch.nn.DataParallel) else model,
+                gradcam=gradcam,
+                img_tensor=img,
+                raw_img_np=batch["image"][i].squeeze().numpy(),
+                sid=sid,
+                gt_label=label,
+                pred_label=pred,
+                save_dir=gradcam_outdir
+            )
+            print(f"[CAM] Saved: {os.path.basename(cam_path)}")
+
+    print(f"[INFO] All Grad-CAM results saved under: {gradcam_outdir}")
+
+
+
+
+# ============================================================
+# 🧪 3️⃣ Main evaluation entrypoint
+# ============================================================
 def run_eval_on_testset(cfg, model, device, pos_weight, test_loader):
     # --- Load checkpoint ---
     ckpt_path = os.path.join(cfg["out"]["output_dir"], "best.pth")
@@ -102,3 +164,6 @@ def run_eval_on_testset(cfg, model, device, pos_weight, test_loader):
     save_confusion_matrix(y_true, y_pred, outdir)
     save_roc_curve(y_true, y_prob, outdir)
     save_test_metrics_to_csv(metrics, outdir)
+
+    # --- Apply Grad-CAM on all test samples ---
+    apply_gradcam_on_testset(model, test_loader, device, cfg)

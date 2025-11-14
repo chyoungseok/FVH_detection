@@ -1,23 +1,23 @@
 data:
-  root_dir: "/zdisk/users/ext_user_03/01_yschoi/project_01_FVH_detection/01_data/06_flair_preproc_slices_v02_h5"
+  root_dir: "/zdisk/users/ext_user_03/01_yschoi/project_01_FVH_detection/01_data/07_flair_preproc_slices_v03_whole_h5"
   num_workers: 0
   stratified_split: true   # stratified split 사용 여부
   undersample: true
-  undersample_ratio: 1.0   # pos:neg 비율
+  undersample_ratio: 2.0   # pos:neg 비율
 
 model:
   resnet:
-    enabled: false
+    enabled: true
     backbone: resnet34
     in_channels: 1
     pretrained: false
   
   vit:
     pretrained: false
-    enabled: true
+    enabled: false
   
   swin:
-    enabled: True
+    enabled: false
     hidden_dim: 96
     layers: [2, 2, 6, 2]
     heads: [3, 6, 12, 24]
@@ -29,8 +29,8 @@ model:
     relative_pos_embedding: true
 
 train:
-    batch_size: 64
-    epochs: 100
+    batch_size: 8
+    epochs: 30
     lr: 1.0e-4
     weight_decay: 1.0e-4
     optimizer: adamw
@@ -43,8 +43,8 @@ train:
     amp: true
     seed: 42
     pos_weight_auto: true
-    gpus: 2
+    gpus: 1
     loss: "focal" # bce/ focal
     
 out:
-  output_dir: runs/resnet_02_whole_p1n1_focal_depth34.yaml
+  output_dir: runs/resnet_03_whole_p1n2_focal_depth34_batch8.yaml

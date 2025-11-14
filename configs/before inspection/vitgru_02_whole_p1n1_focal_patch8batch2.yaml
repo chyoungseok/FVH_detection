@@ -1,0 +1,63 @@
+data:
+  root_dir: "/zdisk/users/ext_user_03/01_yschoi/project_01_FVH_detection/01_data/06_flair_preproc_slices_v02_h5"
+  num_workers: 0
+  stratified_split: true   # stratified split 사용 여부
+  undersample: true
+  undersample_ratio: 1.0   # pos:neg 비율
+
+model:
+  resnet:
+    enabled: false
+    backbone: resnet18
+    in_channels: 1
+    pretrained: false
+  
+  vit:
+    enabled: false
+    pretrained: false
+    
+  swin:
+    enabled: false
+    hidden_dim: 96
+    layers: [2, 2, 6, 2]
+    heads: [3, 6, 12, 24]
+    channels: 1
+    num_classes: 1
+    head_dim: 32
+    window_size: 7
+    downscaling_factors: [4, 2, 2, 2]
+    relative_pos_embedding: true
+
+  vitgru:
+    enabled: true
+    in_channels: 1
+    img_size: 672
+    patch_size: 8
+    embed_dim: 64
+    num_heads: 4
+    num_layers: 8
+    gru_hidden: 1024
+    bidirectional: false
+    dropout: 0.3
+    num_classes: 1
+
+train:
+    batch_size: 2
+    epochs: 300
+    lr: 1.0e-4
+    weight_decay: 1.0e-4
+    optimizer: adamw
+    scheduler: cosine   # cosine / step / plateau / none
+    step_size: 20
+    gamma: 0.1 
+    factor: 0.5          # plateau에서 사용
+    patience: 5          # plateau에서 사용
+    warmup_epochs: 3
+    amp: true
+    seed: 42
+    pos_weight_auto: true
+    gpus: 1
+    loss: "focal" # bce/ focal
+    
+out:
+  output_dir: runs/vitgru_02_whole_p1n1_focal_patch8batch2.yaml

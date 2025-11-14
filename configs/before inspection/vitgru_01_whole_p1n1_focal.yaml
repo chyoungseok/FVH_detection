@@ -56,8 +56,8 @@ train:
     amp: true
     seed: 42
     pos_weight_auto: true
-    gpus: 0
+    gpus: 2
     loss: "focal" # bce/ focal
     
 out:
-  output_dir: runs/vit_01_whole_p1n1_focal.yaml
+  output_dir: runs/vitgru_01_whole_p1n1_focal.yaml
